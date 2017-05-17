@@ -1,0 +1,200 @@
+---
+title: "main_Risk"
+---
+
+```{r library, echo=FALSE,message=FALSE,warning=FALSE}
+library(RMeCab)
+library(reshape2)
+library(psych)
+library(foreach)
+library(iterators)
+library(RSQLite)
+```
+
+# Preliminary-analysis 0
+## Common codes to CG and RISK
+```{r functions, echo=FALSE,message=FALSE,warning=FALSE}
+####Functions
+"+" <- function(e1, e2) {
+  if (is.character(c(e1, e2))) {
+    paste(e1, e2, sep = "")
+  } else {
+    base::"+"(e1, e2)
+  }
+}
+
+"naturalsort" <- function(text){
+  toList <- strsplit(text, "(?<=\\d)(?=\\D)|(?<=\\D)(?=\\d)", perl=TRUE)
+  yer <- c()
+  for (i in 1:length(text)){
+    yer[i] <- toList[[i]][length(toList[[i]])-1]
+  }
+  tokenList <- data.frame(x = yer)
+  orderedIndex <- order(tokenList$x)
+  text[orderedIndex]
+}
+
+"countRows"<-function(i){
+  return(sum(allnoun2.tmp[i]!=0))
+}
+```
+
+# Preliminary-analysis 1
+## Common codes to CG and RISK: Change "local_path" accoding to which is analyized, CG or RISK
+```{r pre_analysis, echo=FALSE,message=FALSE,warning=FALSE}
+###To get the following two vaialbles; vectors of uniquie firm codes and years.
+# exCodes_fullTerms: unique frim codes which have full terms and whoes ficial years start in March
+# uniq.Years: from 200403 to 201603
+##Initial setting
+local_path <- "/Desktop/youho/risk/" #this refers to where the textural data files are on your local disk
+splited.wd <- strsplit(getwd(), split="/")
+path = "/"+splited.wd[[1]][2]+"/"+splited.wd[[1]][3]+local_path
+
+##1: Set a list of all files
+y<-list.files(path)
+
+##2: "March" or not?
+alCodes_March<-c()
+alCodes_nonMar<-c()
+alyears<-c()
+j <- 1;k <- 1
+for(i in 1:length(y)){
+  if(length(grep("^[0-9]{4}.*[0-9]{4}03.*$",y[i])) == 1){
+    alCodes_March[j] <- substr(y[i],1,4)
+    alyears[j] <- substr(y[i],11,16)
+    j = j + 1
+  }else{
+    alCodes_nonMar[k] <- substr(y[i],1,4)
+    k = k + 1
+  }}
+
+##3: Get uniquie firm codes,and years
+uniq.Codes_March=sort(unique(alCodes_March))
+uniq.Codes_nonMar=sort(unique(alCodes_nonMar))
+uniq.Codes_absMarch <- setdiff(uniq.Codes_March, uniq.Codes_nonMar) #diffset
+uniq.Years=sort(unique(alyears)) 
+
+##4: Get firm codes with full terms
+j <- 1
+k <- 1
+excluded<-c()
+Codes_fullTerms <- c()
+for(i in uniq.Codes_absMarch){
+  uniq.y <- list.files(path, pattern="^"+i+"_")
+  if(length(uniq.y)==13){Codes_fullTerms[j]<-i;j<-j+1}else{excluded[k]<-i;k<-k+1}
+}
+
+##5: Exclude missing industries
+industry_code2 <- read.csv("industry_code2.csv", header=T) #your working directory of R
+exCodes_fullTerms <- as.numeric(Codes_fullTerms[Codes_fullTerms %in% unique(industry_code2$株式コード.固有名コード.)])
+#length(exCodes_fullTerms)
+```
+
+# Preliminary-analysis 2
+## Common codes to CG and RISK
+```{r, message=FALSE, warning=FALSE}
+##Make keywords list
+MC.kwd<-unique(read.csv("Keyword_for_CG.csv",header=FALSE)) #working directory of R
+MC.filter<-MC.kwd[,1]
+
+##Make a small industrial class code
+SmallClass<-sort(unique(industry_code2$日経業種小分類))
+SmallClassNameJ <- c()
+SmallClassNameE <- c()
+SmallClassFmNumbers <-c()
+for (i in 1:length(SmallClass)) {
+  SmallClassNameJ[i] <- as.character(unique(industry_code2$日経業種名.漢字.[industry_code2$日経業種小分類==SmallClass[i]]))
+  SmallClassNameE[i] <- as.character(unique(industry_code2$日経業種名.英文.[industry_code2$日経業種小分類==SmallClass[i]]))
+  SmallClassFmNumbers[i] <- length(industry_code$X.1[industry_code$日経業種小分類==SmallClass[i]])
+}
+
+SmallClass.df<-data.frame()
+SmallClass.df <-data.frame(code.id = SmallClass, code.E = SmallClassNameE, code.J = SmallClassNameJ, numbers = SmallClassFmNumbers)
+
+##Make a middle industrial class code
+CorresTable <- read.csv("industry_code_middle.csv", sep = "\t",header = T)
+
+MiddleClass<-sort(unique(industry_code2$日経業種中分類))
+MiddleClass.df<-data.frame()
+
+MiddleClassFmNumbers <-c()
+for (i in 1:length(MiddleClass)) {
+  MiddleClassFmNumbers[i] <- length(industry_code2$firmname[industry_code2$日経業種中分類==MiddleClass[i]])
+}
+
+MiddleClass.df<-data.frame()
+MiddleClass.df<-data.frame(code.id = MiddleClass, code.E = CorresTable$英語名, code.J = CorresTable$業種名, numbers = MiddleClassFmNumbers)
+
+##Remove unnecessary variavles
+remove(list=c("SmallClassNameE","SmallClassNameJ","MiddleClassFmNumbers","SmallClassFmNumbers"))
+gc(T,T);gc(T,T)
+```
+
+## Raw data of token and ttr of RISK
+```{r, message=FALSE, warning=FALSE}
+rawAllToken_RISK.mat <- matrix(0,length(exCodes_fullTerms),13)
+rawTTRNun_RISK.mat <- matrix(0,length(exCodes_fullTerms),13)
+
+#in ten-files increment
+lot_number <- seq(1,length(exCodes_fullTerms), by = 10)
+
+interval<-9
+for (i in lot_number){
+  if ((length(exCodes_fullTerms)%%10!=0) & (i==rev(lot_number)[1])){interval<-length(exCodes_fullTerms)%%10-1}
+
+  for (j in i:(i+interval)){
+    y<-naturalsort(list.files(path,pattern="^"+exCodes_fullTerms[j]))
+    alltoken.tmp <- suppressWarnings(docDF(path+y,type=1,N=1))
+    alltoken2.tmp <- alltoken.tmp[,c(-1,-2,-3)]
+    alltoken2.tmp[nrow(alltoken2.tmp)+1,] <- as.numeric(colSums(alltoken2.tmp))
+    #
+    allnoun.tmp <- alltoken.tmp[alltoken.tmp$POS1=="名詞" & alltoken.tmp$POS2 == "一般",]
+    allnoun2.tmp <- allnoun.tmp[,c(-1,-2,-3)]
+    allnoun2.tmp[nrow(allnoun2.tmp)+1,]
+    #
+    rawAllToken_RISK.mat[j,] <- as.numeric(alltoken2.tmp[nrow(alltoken2.tmp),])
+    rawTTRNun_RISK.mat[j,] <- as.numeric(lapply(1:length(uniq.Years),countRows))/as.numeric(alltoken2.tmp[nrow(alltoken2.tmp),])
+    #
+    remove(list = c("alltoken.tmp","alltoken2.tmp","allnoun.tmp","allnoun2.tmp"))
+    gc(T,T);gc(T,T)
+  }
+}
+
+colnames(rawAllToken_RISK.mat) <- uniq.Years
+rownames(rawAllToken_RISK.mat) <- exCodes_fullTerms
+tRawAllToken_RISK.mat<-t(rawAllToken_RISK.mat)
+tRawAllToken_RISK.df<-as.data.frame(tRawAllToken_RISK.mat)
+tRawAllToken_RISK.df["year"]<-as.numeric(uniq.Years)
+tRawAllToken_RISK.melt<-melt(tRawAllToken_RISK.df, id="year", value.name="tokenRisk",na.rm=TRUE)
+tRawAllToken_RISK.melt<-tRawAllToken_RISK.melt[,c(2,1,3)]
+colnames(tRawAllToken_RISK.melt)<-c("code", "year", "tokenRisk")
+
+colnames(rawTTRNun_RISK.mat) <- uniq.Years
+rownames(rawTTRNun_RISK.mat) <- exCodes_fullTerms
+tRawTTRNun_RISK.mat<-t(rawTTRNun_RISK.mat)
+tRawTTRNun_RISK.df<-as.data.frame(tRawTTRNun_RISK.mat)
+tRawTTRNun_RISK.df["year"]<-as.numeric(uniq.Years)
+tRawTTRNun_RISK.melt<-melt(tRawTTRNun_RISK.df, id="year", value.name="tokenRisk",na.rm=TRUE)
+tRawTTRNun_RISK.melt<-tRawTTRNun_RISK.melt[,c(2,1,3)]
+colnames(tRawTTRNun_RISK.melt)<-c("code", "year", "ttrRisk")
+
+#Merge
+rawData_RISK.melt<-merge(x=tRawAllToken_RISK.melt, y=tRawTTRNun_RISK.melt
+                     ,by.x=c("code", "year")
+                     ,by.y=c("code", "year"))
+```
+
+## SQLite
+```{r}
+dbname="youho.sqlite3"
+library(RSQLite)
+driver=dbDriver("SQLite")
+con=dbConnect(driver,dbname)
+dbGetQuery(con, "drop table if exists riskTTR")
+rs=dbWriteTable(con,"riskTTR",as.data.frame(rawData_RISK.melt),row.names=T)
+#dbGetQuery(con,"SELECT * FROM riskTTR limit 5;")
+#dbListTables(con)
+
+```
+
+
