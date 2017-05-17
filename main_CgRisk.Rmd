@@ -10,8 +10,8 @@ library(foreach)
 library(iterators)
 ```
 
-#Preliminary-analysis 0
-##Common codes to CG and RISK
+# Preliminary-analysis 0
+## Common codes to CG and RISK
 ```{r functions, echo=FALSE,message=FALSE,warning=FALSE}
 ####Functions
 "+" <- function(e1, e2) {
@@ -38,8 +38,8 @@ library(iterators)
 }
 ```
 
-#Preliminary-analysis 1
-##Common codes to CG and RISK: Change "local_path" accoding to which is analyized, CG or RISK
+# Preliminary-analysis 1
+## Common codes to CG and RISK: Change "local_path" accoding to which is analyized, CG or RISK
 ```{r pre_analysis, echo=FALSE,message=FALSE,warning=FALSE}
 ###To get the following two vaialbles; vectors of uniquie firm codes and years.
 # exCodes_fullTerms: unique frim codes which have full terms and whoes ficial years start in March
@@ -89,8 +89,8 @@ exCodes_fullTerms <- as.numeric(Codes_fullTerms[Codes_fullTerms %in% unique(indu
 #length(exCodes_fullTerms)
 ```
 
-#Preliminary-analysis 2
-##Common codes to CG and RISK
+# Preliminary-analysis 2
+## Common codes to CG and RISK
 ```{r, message=FALSE, warning=FALSE}
 ##Make keywords list
 MC.kwd<-unique(read.csv("Keyword_for_CG.csv",header=FALSE)) #working directory of R
@@ -287,8 +287,8 @@ rawData_CG.melt<-merge(x=rawCG_TokenTTR.melt, y=tRawTfidif_CG.melt
                      ,by.y=c("code", "year"), all = TRUE)
 ```
 
-##Merge CG and RISK
-```{r}
+## Merge CG and RISK
+```{r, message=FALSE, warning=FALSE}
 rawData_RiskCG.melt<-merge(x=rawData_RISK.melt, y=rawData_CG.melt
                      ,by.x=c("code", "year")
                      ,by.y=c("code", "year"), all = TRUE)
