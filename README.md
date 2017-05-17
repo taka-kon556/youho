@@ -1,4 +1,4 @@
 # youho
 Textual analysis of youho
 
-Run this code in "R_code."
+Run this code, which provides the representative values such as TTR and TFIDF, in "R_code."
